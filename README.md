@@ -2,6 +2,8 @@
 
 A small, fast task tracker that runs entirely in the browser. Add tasks, give them a due date or high priority, filter and search them, and tick them off. Your list is saved on your device, so it is still there when you come back.
 
+![screenshot](screenshot.png)
+
 ## Features:
 
 - **Add tasks** with an optional due date and a high-priority flag (shown as a highlighter mark).
