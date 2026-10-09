@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inkpad: a small task tracker</title>
+<meta name="description" content="Inkpad is a lightweight todo app: add, prioritise, filter and tick off tasks. Saved in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* ---------- Design tokens ---------- */
+  :root {
+    --paper: #EEF3EA;
+    --grid: #D6E2D1;
+    --surface: #F9FBF7;
+    --ink: #1D2B45;
+    --ink-soft: #56627A;
+    --rule: #BFCDBA;
+    --marker: #F3DD3E;
+    --red: #B3302A;
+    --focus: #2D5BD7;
+    --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #121A28; --grid: #1C2639; --surface: #182234;
+      --ink: #E4EAF4; --ink-soft: #9AA6BC; --rule: #2C3850;
+      --marker: rgba(222, 196, 40, .42); --red: #F07A70; --focus: #8DB0FF;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #121A28; --grid: #1C2639; --surface: #182234;
+    --ink: #E4EAF4; --ink-soft: #9AA6BC; --rule: #2C3850;
+    --marker: rgba(222, 196, 40, .42); --red: #F07A70; --focus: #8DB0FF;
+    color-scheme: dark;
+  }
+
+  /* ---------- Base ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 24px 24px;
+    color: var(--ink);
+    font: 400 1.0625rem/1.55 var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  .page { max-width: 680px; margin: 0 auto; padding: 48px 20px 96px; }
+
+  /* ---------- Header ---------- */
+  header h1 {
+    font: 800 clamp(2.75rem, 9vw, 4.25rem)/0.95 var(--font-display);
+    letter-spacing: -0.035em;
+    margin: 0;
+  }
+  .today { margin: 10px 0 0; color: var(--ink-soft); }
+  .progress { margin-top: 22px; }
+  .progress-text { font-size: .95rem; color: var(--ink-soft); margin: 0 0 6px; }
+  .progress-track { height: 3px; background: var(--rule); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0; background: var(--ink); transition: width .4s ease; }
+
+  /* ---------- Add form ---------- */
+  .add {
+    margin-top: 32px;
+    display: flex; flex-wrap: wrap; gap: 8px;
+    background: var(--surface);
+    border: 1.5px solid var(--ink);
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .add input[type="text"] {
+    flex: 1 1 220px; min-width: 0;
+    border: 0; background: transparent; padding: 10px 10px;
+  }
+  .add input[type="text"]::placeholder { color: var(--ink-soft); }
+  .add input[type="text"]:focus-visible { outline: none; }
+  .add:focus-within { box-shadow: 4px 4px 0 var(--focus); border-color: var(--focus); }
+  .add input[type="date"] {
+    border: 1px solid var(--rule); border-radius: 6px; background: transparent;
+    padding: 8px 8px; font-size: .95rem; min-height: 42px;
+  }
+  .hl-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--rule); border-radius: 6px; background: transparent;
+    padding: 8px 10px; font-size: .95rem; cursor: pointer; min-height: 42px;
+  }
+  .hl-toggle[aria-pressed="true"] { background: var(--marker); border-color: transparent; color: var(--ink); }
+  :root[data-theme="dark"] .hl-toggle[aria-pressed="true"] { color: var(--ink); }
+  .btn-primary {
+    border: 0; border-radius: 6px; background: var(--ink); color: var(--paper);
+    padding: 8px 16px; font-weight: 700; cursor: pointer; min-height: 42px;
+  }
+  .btn-primary:hover { opacity: .9; }
+  .form-error { color: var(--red); font-size: .95rem; margin: 8px 2px 0; min-height: 1.2em; }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar {
+    margin-top: 20px;
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  }
+  .filters { display: flex; gap: 4px; }
+  .filters button {
+    border: 1px solid transparent; background: transparent; border-radius: 999px;
+    padding: 6px 12px; cursor: pointer; color: var(--ink-soft); font-size: .95rem;
+  }
+  .filters button[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); font-weight: 700; }
+  .filters .count { font-variant-numeric: tabular-nums; opacity: .75; margin-left: 2px; }
+  .search {
+    flex: 0 1 220px; min-width: 150px;
+    border: 1px solid var(--rule); background: var(--surface); border-radius: 999px;
+    padding: 7px 14px; font-size: .95rem;
+  }
+
+  /* ---------- List ---------- */
+  .list {
+    list-style: none; margin: 16px 0 0; padding: 0;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 10px;
+  }
+  .list:empty { display: none; }
+  .task {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: start;
+    padding: 14px 14px 14px 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .task:last-child { border-bottom: 0; }
+
+  .check {
+    appearance: none; -webkit-appearance: none; margin: 3px 0 0;
+    width: 22px; height: 22px; border: 1.5px solid var(--ink); border-radius: 5px;
+    display: grid; place-content: center; cursor: pointer; background: transparent;
+  }
+  .check::after {
+    content: ""; width: 11px; height: 6px;
+    border-left: 2.5px solid var(--paper); border-bottom: 2.5px solid var(--paper);
+    transform: rotate(-45deg) translate(1px, -1px) scale(0); transition: transform .15s ease;
+  }
+  .check:checked { background: var(--ink); }
+  .check:checked::after { transform: rotate(-45deg) translate(1px, -1px) scale(1); }
+
+  .body { min-width: 0; }
+  .title {
+    display: inline;
+    overflow-wrap: anywhere;
+    /* The ink strike, drawn as a background line so it can animate across */
+    background-image: linear-gradient(var(--ink), var(--ink));
+    background-repeat: no-repeat;
+    background-position: 0 58%;
+    background-size: 0% 2px;
+    transition: background-size .35s ease-out, color .35s ease;
+  }
+  .task.high .title {
+    background-image:
+      linear-gradient(var(--ink), var(--ink)),
+      linear-gradient(transparent 52%, var(--marker) 52%, var(--marker) 92%, transparent 92%);
+    background-size: 0% 2px, 100% 100%;
+    background-position: 0 58%, 0 0;
+    box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  }
+  .task.done .title { background-size: 100% 2px; color: var(--ink-soft); }
+  .task.high.done .title { background-size: 100% 2px, 100% 100%; }
+
+  .meta { display: block; font-size: .875rem; color: var(--ink-soft); margin-top: 2px; }
+  .meta.overdue { color: var(--red); font-weight: 700; }
+  .task.done .meta.overdue { color: var(--ink-soft); font-weight: 400; }
+
+  .edit-input {
+    width: 100%; border: 1px solid var(--focus); border-radius: 6px;
+    background: var(--paper); padding: 4px 8px;
+  }
+
+  .actions { display: flex; gap: 2px; }
+  .icon-btn {
+    width: 34px; height: 34px; display: grid; place-items: center;
+    border: 0; background: transparent; border-radius: 6px; cursor: pointer; color: var(--ink-soft);
+  }
+  .icon-btn:hover { background: var(--paper); color: var(--ink); }
+  .icon-btn.delete:hover { color: var(--red); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  .empty {
+    margin-top: 16px; padding: 28px 20px; text-align: center;
+    border: 1.5px dashed var(--rule); border-radius: 10px; color: var(--ink-soft);
+    background: var(--surface);
+  }
+  .empty[hidden] { display: none; }
+
+  .footer-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    margin-top: 12px; font-size: .95rem; color: var(--ink-soft);
+  }
+  .link-btn {
+    border: 0; background: transparent; color: var(--ink-soft); cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px; padding: 4px;
+  }
+  .link-btn:hover { color: var(--red); }
+  .link-btn[disabled] { opacity: .45; cursor: default; text-decoration: none; }
+  .link-btn[disabled]:hover { color: var(--ink-soft); }
+
+  /* ---------- Toast ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translate(-50%, 120%); transition: transform .25s ease;
+    pointer-events: none;
+  }
+  .toast.show { transform: translate(-50%, -20px); pointer-events: auto; }
+  .toast-inner {
+    display: flex; gap: 14px; align-items: center;
+    background: var(--ink); color: var(--paper);
+    padding: 10px 12px 10px 16px; border-radius: 8px; white-space: nowrap;
+  }
+  .toast button {
+    border: 1px solid currentColor; background: transparent; color: inherit;
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; font-weight: 700;
+  }
+
+  @media (max-width: 520px) {
+    .page { padding-top: 32px; }
+    .add input[type="date"], .hl-toggle { flex: 1 1 auto; }
+    .btn-primary { flex: 1 1 100%; }
+    .search { flex: 1 1 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0s !important; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>Inkpad</h1>
+    <p class="today" id="today"></p>
+    <div class="progress" aria-live="polite">
+      <p class="progress-text" id="progressText"></p>
+      <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+  </header>
+
+  <form class="add" id="addForm" autocomplete="off" novalidate>
+    <label for="newTitle" class="sr-only">New task</label>
+    <input id="newTitle" type="text" maxlength="140" placeholder="What needs doing?">
+    <label for="newDue" class="sr-only">Due date (optional)</label>
+    <input id="newDue" type="date" title="Due date (optional)">
+    <button type="button" class="hl-toggle" id="newHigh" aria-pressed="false" title="Mark as high priority">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
+      High priority
+    </button>
+    <button type="submit" class="btn-primary">Add task</button>
+  </form>
+  <p class="form-error" id="formError" role="alert"></p>
+
+  <div class="toolbar">
+    <div class="filters" role="group" aria-label="Show tasks">
+      <button type="button" data-filter="all" aria-pressed="true">All <span class="count" id="countAll"></span></button>
+      <button type="button" data-filter="active" aria-pressed="false">Active <span class="count" id="countActive"></span></button>
+      <button type="button" data-filter="done" aria-pressed="false">Done <span class="count" id="countDone"></span></button>
+    </div>
+    <label for="search" class="sr-only">Search tasks</label>
+    <input id="search" class="search" type="search" placeholder="Search tasks">
+  </div>
+
+  <ul class="list" id="list" aria-label="Tasks"></ul>
+  <p class="empty" id="empty" hidden></p>
+
+  <div class="footer-row">
+    <span id="leftText"></span>
+    <button type="button" class="link-btn" id="clearDone">Clear finished tasks</button>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <div class="toast-inner"><span id="toastText"></span><button type="button" id="undoBtn">Undo</button></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "inkpad.tasks.v1";
+  var FILTER_KEY = "inkpad.filter.v1";
+
+  // ---------- Helpers ----------
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function localDate(offsetDays) {
+    var d = new Date();
+    d.setDate(d.getDate() + (offsetDays || 0));
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+  function prettyDate(iso) {
+    return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  function dueInfo(due) {
+    if (!due) return null;
+    var today = localDate(0), tomorrow = localDate(1);
+    if (due < today) return { text: "Overdue, was due " + prettyDate(due), overdue: true };
+    if (due === today) return { text: "Due today", overdue: false };
+    if (due === tomorrow) return { text: "Due tomorrow", overdue: false };
+    return { text: "Due " + prettyDate(due), overdue: false };
+  }
+
+  // ---------- Storage (wrapped: storage can be unavailable) ----------
+  function seedTasks() {
+    var now = Date.now();
+    return [
+      { id: uid(), title: "Write the project README", due: localDate(0), priority: "high", done: false, created: now },
+      { id: uid(), title: "Deploy the app and share the link", due: localDate(2), priority: "normal", done: false, created: now + 1 },
+      { id: uid(), title: "Sketch the layout on paper", due: "", priority: "normal", done: true, created: now + 2, completed: now }
+    ];
+  }
+  function loadTasks() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw === null) return seedTasks();
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter(function (t) { return t && typeof t.title === "string"; }) : seedTasks();
+    } catch (e) { return seedTasks(); }
+  }
+  function saveTasks() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch (e) { /* storage full or blocked */ }
+  }
+  function loadFilter() {
+    try { var f = localStorage.getItem(FILTER_KEY); return ["all", "active", "done"].indexOf(f) > -1 ? f : "all"; }
+    catch (e) { return "all"; }
+  }
+  function saveFilter() { try { localStorage.setItem(FILTER_KEY, filter); } catch (e) {} }
+
+  // ---------- State ----------
+  var tasks = loadTasks();
+  var filter = loadFilter();
+  var query = "";
+  var editingId = null;
+  var lastRemoved = null; // { items: [...], label }
+  var toastTimer = null;
+
+  // ---------- Elements ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var listEl = $("list"), emptyEl = $("empty"), form = $("addForm"), titleIn = $("newTitle"),
+      dueIn = $("newDue"), highBtn = $("newHigh"), errEl = $("formError"), searchIn = $("search");
+
+  $("today").textContent = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+  // ---------- Sorting: unfinished first (high priority, then soonest due), finished last ----------
+  function sortTasks(a, b) {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    if (a.done) return (b.completed || 0) - (a.completed || 0);
+    if (a.priority !== b.priority) return a.priority === "high" ? -1 : 1;
+    if (a.due !== b.due) { if (!a.due) return 1; if (!b.due) return -1; return a.due < b.due ? -1 : 1; }
+    return a.created - b.created;
+  }
+
+  var ICON_EDIT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+  var ICON_DELETE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+
+  // ---------- Render ----------
+  function render() {
+    var total = tasks.length;
+    var doneCount = tasks.filter(function (t) { return t.done; }).length;
+    var activeCount = total - doneCount;
+
+    $("countAll").textContent = total;
+    $("countActive").textContent = activeCount;
+    $("countDone").textContent = doneCount;
+    $("progressText").textContent = total ? doneCount + " of " + total + " tasks done" : "No tasks yet";
+    $("progressFill").style.width = total ? (doneCount / total * 100) + "%" : "0";
+    $("leftText").textContent = activeCount === 1 ? "1 task left" : activeCount + " tasks left";
+    $("clearDone").disabled = doneCount === 0;
+
+    document.querySelectorAll("[data-filter]").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.filter === filter));
+    });
+
+    var q = query.trim().toLowerCase();
+    var visible = tasks.filter(function (t) {
+      if (filter === "active" && t.done) return false;
+      if (filter === "done" && !t.done) return false;
+      return !q || t.title.toLowerCase().indexOf(q) > -1;
+    }).sort(sortTasks);
+
+    listEl.textContent = "";
+    visible.forEach(function (t) { listEl.appendChild(renderTask(t)); });
+
+    if (visible.length === 0) {
+      emptyEl.hidden = false;
+      if (q) emptyEl.textContent = "No tasks match \u201C" + query.trim() + "\u201D. Try a different word or clear the search.";
+      else if (filter === "active") emptyEl.textContent = total ? "Nothing left to do. Add a new task above when you\u2019re ready." : "No tasks yet. Type one above and press Enter.";
+      else if (filter === "done") emptyEl.textContent = "No finished tasks yet. Tick a task\u2019s box to move it here.";
+      else emptyEl.textContent = "No tasks yet. Type one above and press Enter.";
+    } else {
+      emptyEl.hidden = true;
+    }
+  }
+
+  function renderTask(t) {
+    var li = document.createElement("li");
+    li.className = "task" + (t.done ? " done" : "") + (t.priority === "high" ? " high" : "");
+    li.dataset.id = t.id;
+
+    var cb = document.createElement("input");
+    cb.type = "checkbox"; cb.className = "check"; cb.checked = !!t.done;
+    cb.setAttribute("aria-label", (t.done ? "Mark as not done: " : "Mark as done: ") + t.title);
+
+    var body = document.createElement("div");
+    body.className = "body";
+
+    if (editingId === t.id) {
+      var input = document.createElement("input");
+      input.type = "text"; input.className = "edit-input"; input.value = t.title; input.maxLength = 140;
+      input.setAttribute("aria-label", "Edit task title");
+      body.appendChild(input);
+      requestAnimationFrame(function () { input.focus(); input.select(); });
+    } else {
+      var title = document.createElement("span");
+      title.className = "title"; title.textContent = t.title;
+      body.appendChild(title);
+    }
+
+    var info = dueInfo(t.due);
+    if (info || t.priority === "high") {
+      var meta = document.createElement("span");
+      meta.className = "meta" + (info && info.overdue ? " overdue" : "");
+      var parts = [];
+      if (info) parts.push(info.text);
+      if (t.priority === "high") parts.push("High priority");
+      meta.textContent = parts.join(", ");
+      body.appendChild(meta);
+    }
+
+    var actions = document.createElement("div");
+    actions.className = "actions";
+    actions.innerHTML =
+      '<button type="button" class="icon-btn edit" title="Edit">' + ICON_EDIT + '</button>' +
+      '<button type="button" class="icon-btn delete" title="Delete">' + ICON_DELETE + '</button>';
+    actions.querySelector(".edit").setAttribute("aria-label", "Edit: " + t.title);
+    actions.querySelector(".delete").setAttribute("aria-label", "Delete: " + t.title);
+
+    li.append(cb, body, actions);
+    return li;
+  }
+
+  // ---------- Actions ----------
+  function findTask(id) { return tasks.find(function (t) { return t.id === id; }); }
+
+  function addTask(title, due, high) {
+    tasks.push({ id: uid(), title: title, due: due || "", priority: high ? "high" : "normal", done: false, created: Date.now() });
+    saveTasks(); render();
+  }
+  function toggleTask(id) {
+    var t = findTask(id); if (!t) return;
+    t.done = !t.done; t.completed = t.done ? Date.now() : undefined;
+    saveTasks(); render();
+  }
+  function removeTasks(ids, label) {
+    var removed = tasks.filter(function (t) { return ids.indexOf(t.id) > -1; });
+    if (!removed.length) return;
+    tasks = tasks.filter(function (t) { return ids.indexOf(t.id) === -1; });
+    lastRemoved = removed;
+    saveTasks(); render();
+    showToast(label);
+  }
+  function commitEdit(id, value) {
+    var t = findTask(id); var v = (value || "").trim();
+    editingId = null;
+    if (t && v) t.title = v;
+    saveTasks(); render();
+    var row = listEl.querySelector('[data-id="' + id + '"] .edit');
+    if (row) row.focus();
+  }
+
+  function showToast(text) {
+    $("toastText").textContent = text;
+    $("toast").classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 5000);
+  }
+  function hideToast() { $("toast").classList.remove("show"); lastRemoved = null; }
+
+  // ---------- Events ----------
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var title = titleIn.value.trim();
+    if (!title) { errEl.textContent = "Type a task before adding it."; titleIn.focus(); return; }
+    errEl.textContent = "";
+    addTask(title, dueIn.value, highBtn.getAttribute("aria-pressed") === "true");
+    titleIn.value = ""; dueIn.value = ""; highBtn.setAttribute("aria-pressed", "false");
+    titleIn.focus();
+  });
+  titleIn.addEventListener("input", function () { if (titleIn.value.trim()) errEl.textContent = ""; });
+  highBtn.addEventListener("click", function () {
+    highBtn.setAttribute("aria-pressed", String(highBtn.getAttribute("aria-pressed") !== "true"));
+  });
+
+  document.querySelector(".filters").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-filter]"); if (!b) return;
+    filter = b.dataset.filter; saveFilter(); render();
+  });
+  searchIn.addEventListener("input", function () { query = searchIn.value; render(); });
+
+  listEl.addEventListener("change", function (e) {
+    if (e.target.classList.contains("check")) {
+      var id = e.target.closest(".task").dataset.id;
+      toggleTask(id);
+      var cb = listEl.querySelector('[data-id="' + id + '"] .check');
+      if (cb) cb.focus();
+    }
+  });
+  listEl.addEventListener("click", function (e) {
+    var li = e.target.closest(".task"); if (!li) return;
+    var id = li.dataset.id;
+    if (e.target.closest(".edit")) { editingId = id; render(); }
+    else if (e.target.closest(".delete")) { removeTasks([id], "Task deleted"); }
+  });
+  listEl.addEventListener("dblclick", function (e) {
+    if (e.target.classList.contains("title")) { editingId = e.target.closest(".task").dataset.id; render(); }
+  });
+  listEl.addEventListener("keydown", function (e) {
+    if (!e.target.classList.contains("edit-input")) return;
+    var id = e.target.closest(".task").dataset.id;
+    if (e.key === "Enter") { e.preventDefault(); commitEdit(id, e.target.value); }
+    if (e.key === "Escape") { editingId = null; render(); }
+  });
+  listEl.addEventListener("focusout", function (e) {
+    if (e.target.classList.contains("edit-input") && editingId) {
+      commitEdit(e.target.closest(".task").dataset.id, e.target.value);
+    }
+  });
+
+  $("clearDone").addEventListener("click", function () {
+    var ids = tasks.filter(function (t) { return t.done; }).map(function (t) { return t.id; });
+    removeTasks(ids, ids.length === 1 ? "1 finished task cleared" : ids.length + " finished tasks cleared");
+  });
+  $("undoBtn").addEventListener("click", function () {
+    if (lastRemoved) { tasks = tasks.concat(lastRemoved); saveTasks(); render(); }
+    clearTimeout(toastTimer); hideToast();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
